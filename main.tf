@@ -18,6 +18,11 @@ data "aws_lambda_function" "lambda_create_cart" {
 data "aws_lambda_function" "lambda_product_list" {
   function_name = "list-products"
 }
+
+data "aws_lambda_function" "lambda_create_product" {
+  function_name = "create-product"
+}
+
 # Crear API Gateway HTTP
 resource "aws_apigatewayv2_api" "api_gateway" {
   name          = var.api_name
@@ -60,6 +65,15 @@ resource "aws_apigatewayv2_integration" "product_list_integration" {
   payload_format_version = "2.0"
 }
 
+# Integración para lambda create product
+resource "aws_apigatewayv2_integration" "create_product_integration" {
+  api_id                 = aws_apigatewayv2_api.api_gateway.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = data.aws_lambda_function.lambda_create_product.invoke_arn
+  integration_method     = "POST"
+  payload_format_version = "2.0"
+}
+
 # Ruta POST /user/register → lambda_register
 resource "aws_apigatewayv2_route" "register_route" {
   api_id    = aws_apigatewayv2_api.api_gateway.id
@@ -86,6 +100,13 @@ resource "aws_apigatewayv2_route" "product_list_route" {
   api_id    = aws_apigatewayv2_api.api_gateway.id
   route_key = "GET /products/list"
   target    = "integrations/${aws_apigatewayv2_integration.product_list_integration.id}"
+}
+
+# Ruta POST /products/create → lambda_create_product
+resource "aws_apigatewayv2_route" "create_product_route" {
+  api_id    = aws_apigatewayv2_api.api_gateway.id
+  route_key = "POST /products/create"
+  target    = "integrations/${aws_apigatewayv2_integration.create_product_integration.id}"
 }
 
 # Implementación del deployment
@@ -127,6 +148,15 @@ resource "aws_lambda_permission" "product_list_permission" {
   statement_id  = "AllowAPIGatewayInvokeProductList"
   action        = "lambda:InvokeFunction"
   function_name = data.aws_lambda_function.lambda_product_list.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.api_gateway.execution_arn}/*/*"
+}
+
+# Permisos para que API Gateway invoque lambda_create_product
+resource "aws_lambda_permission" "create_product_permission" {
+  statement_id  = "AllowAPIGatewayInvokeCreateProduct"
+  action        = "lambda:InvokeFunction"
+  function_name = data.aws_lambda_function.lambda_create_product.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.api_gateway.execution_arn}/*/*"
 }
